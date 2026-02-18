@@ -1,24 +1,35 @@
 import asyncio
-from app.db.mongo import get_db
-from app.core.security import hash_password
+import os
+from datetime import datetime, timezone
 
-EMAIL = "admin@example.com"
-PASSWORD = "admin123"  # change this
+from app.core.security import hash_password
+from app.db.mongo import get_db, get_client
+
+
+EMAIL = os.getenv("ADMIN_EMAIL", "admin@example.com").strip().lower()
+PASSWORD = os.getenv("ADMIN_PASSWORD", "admin123").strip()
+
 
 async def main():
     db = get_db()
-    admins = db["admins"]
-    existing = await admins.find_one({"email": EMAIL.lower()})
+    existing = await db["admins"].find_one({"email": EMAIL})
     if existing:
-        print("Admin already exists:", EMAIL)
+        print(f"Admin already exists: {EMAIL}")
         return
 
-    await admins.insert_one({
-        "email": EMAIL.lower(),
+    now = datetime.now(timezone.utc)
+    doc = {
+        "email": EMAIL,
         "password_hash": hash_password(PASSWORD),
-        "role": "admin",
-    })
-    print("Created admin:", EMAIL)
+        "created_at": now,
+        "updated_at": now,
+    }
+    await db["admins"].insert_one(doc)
+    print(f"Admin created: {EMAIL}")
+
+    client = get_client()
+    client.close()
+
 
 if __name__ == "__main__":
     asyncio.run(main())
