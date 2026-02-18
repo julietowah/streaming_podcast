@@ -1,15 +1,12 @@
 from datetime import datetime, timezone
 from typing import List
 
-import httpx
 from fastapi import APIRouter, HTTPException, status, Depends
 from bson import ObjectId
 
 from app.db.mongo import get_db
 from app.models.episode import EpisodeCreateIn, EpisodeUpdateIn, EpisodeOut
 from app.core.security import require_admin_token
-from fastapi import UploadFile, File, Form
-from app.services.bunny import upload_audio, upload_image
 
 
 router = APIRouter(tags=["episodes"])
@@ -57,73 +54,19 @@ async def admin_list_all_episodes(admin_id: str = Depends(require_admin_token)):
 
 @router.post("/admin/episodes", response_model=EpisodeOut, status_code=status.HTTP_201_CREATED)
 async def admin_create_episode(
-    title: str = Form(...),
-    description: str = Form(""),
-    category: str = Form("General"),
-    published: bool = Form(True),
-    audio: UploadFile = File(...),
-    cover: UploadFile = File(...),
+    payload: EpisodeCreateIn,
     admin_id: str = Depends(require_admin_token),
 ):
     db = get_db()
-
-    # Validate file types quickly
-    if audio.content_type not in ("audio/mpeg", "audio/mp3", "audio/x-mpeg"):
-        raise HTTPException(status_code=400, detail=f"Audio must be mp3/mpeg. Got {audio.content_type}")
-
-    if cover.content_type not in ("image/jpeg", "image/png", "image/webp"):
-        raise HTTPException(status_code=400, detail=f"Cover must be jpg/png/webp. Got {cover.content_type}")
-
-    audio_bytes = await audio.read()
-    cover_bytes = await cover.read()
-
-    # Upload to Bunny with explicit upstream error mapping
-    try:
-        audio_url = await upload_audio(audio_bytes, audio.filename or "audio.mp3")
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Storage upload timed out while uploading audio.",
-        )
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Storage upload failed while uploading audio: {exc.__class__.__name__}.",
-        )
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Storage rejected audio upload: {str(exc)}",
-        )
-
-    try:
-        thumb_url = await upload_image(cover_bytes, cover.filename or "cover.jpg", cover.content_type)
-    except httpx.TimeoutException:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Storage upload timed out while uploading cover image.",
-        )
-    except httpx.HTTPError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Storage upload failed while uploading cover image: {exc.__class__.__name__}.",
-        )
-    except RuntimeError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=f"Storage rejected cover upload: {str(exc)}",
-        )
-
-    from datetime import datetime, timezone
     now = datetime.now(timezone.utc)
 
     doc = {
-        "title": title,
-        "description": description,
-        "category": category,
-        "published": published,
-        "audio_url": audio_url,
-        "thumbnail_url": thumb_url,
+        "title": payload.title,
+        "description": payload.description,
+        "category": payload.category,
+        "published": payload.published,
+        "audio_url": payload.audio_url,
+        "thumbnail_url": payload.thumbnail_url,
         "created_at": now,
         "updated_at": now,
         "created_by": admin_id,
