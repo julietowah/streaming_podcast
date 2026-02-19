@@ -37,3 +37,12 @@ class EpisodeOut(BaseModel):
     published: bool
     created_at: datetime
     updated_at: datetime
+
+
+class EpisodeCreateJSON(BaseModel):
+    title: str
+    description: str = ""
+    category: str = "General"
+    published: bool = True
+    audio_url: str
+    thumbnail_url: str
