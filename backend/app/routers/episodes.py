@@ -175,7 +175,7 @@ async def admin_update_episode(
     payload: EpisodeUpdateIn,
     admin_id: str = Depends(require_admin_token),
 ):
-    db = get_db()
+    db = get_db() 
     update = {k: v for k, v in payload.model_dump().items() if v is not None}
     if not update:
         raise HTTPException(status_code=400, detail="No fields to update")
